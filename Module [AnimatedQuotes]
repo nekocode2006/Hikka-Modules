@@ -1,0 +1,82 @@
+from telethon.tl.types import Message
+from .. import loader, utils
+from random import randint
+
+
+MAX_RETRY = 3
+BOT_USERNAME = "@QuotAfBot"
+
+
+@loader.tds
+class ModuleAnimatedQuotes(loader.Module):
+    strings = {
+        "name": {
+            "ru": "Модуль [AnimatedQuotes]",
+            "en": "Module [AnimatedQuotes]",
+        },
+        "no_text": {
+            "ru": "🚫 <b>Укажи текст для создания стикера</b>",
+            "en": "🚫 <b>Specify the text for creating a sticker</b>",
+        },
+        "processing": {
+            "ru": "⌛️ <b>Думаю...</b>",
+            "en": "⌛️ <b>Thinking...</b>",
+        },
+        "error": {
+            "ru": "<b>Ошибка</b>",
+            "en": "<b>Error</b>",
+        },
+        "cmd_doc_aniq": {
+            "ru": "<index> <text> - Создать рандомный анимированный стикер",
+            "en": "<index> <text> - Create a random animated sticker",
+        },
+        "cls_doc": {
+            "ru": "Модуль, который создает анимированные стикеры",
+            "en": "A module that creates animated stickers",
+        },
+    }
+
+    async def generate_foto(self, message: Message, image_index: int, args: str):
+        if not args:
+            await utils.answer(message, self.strings["no_text"])
+            return
+
+        processing_message = await utils.answer(message, self.strings["processing"])
+
+        retry_count = 0
+        while retry_count < MAX_RETRY:
+            try:
+                query = await self._client.inline_query(BOT_USERNAME, args)
+                if query and len(query) >= image_index + 1:
+                    await processing_message.respond(file=query[image_index].document)
+                else:
+                    await utils.answer(message, self.strings["error"])
+                break
+            except Exception as e:
+                retry_count += 1
+                if retry_count == MAX_RETRY:
+                    await utils.answer(message, self.strings["error"])
+
+        if message.out:
+            await message.delete()
+
+    async def get_image_index_and_text(self, args: str) -> (int, str):
+        image_index = randint(0, 4)
+        text = args.strip()
+
+        if args.startswith(("1 ", "2 ", "3 ", "4 ", "5 ")):
+            image_index = int(args[0]) - 1
+            text = args[2:].strip()
+        elif args.isdigit():
+            image_index = int(args)
+
+        return image_index, text
+
+    @loader.unrestricted
+    @loader.ratelimit
+    async def aniqcmd(self, message: Message):
+        
+        args = utils.get_args_raw(message).strip()
+
+        image_index, text = await self.get_image_index_and_text(args)
+        await self.generate_foto(message, image_index, text)
